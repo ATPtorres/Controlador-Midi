@@ -18,8 +18,27 @@ printf '%s\n' "$launch"
 grep -F 'Status: ok' <<< "$launch"
 sleep 3
 adb shell pidof "$package"
-activities="$(adb shell dumpsys activity activities)"
-grep 'mResumedActivity' <<< "$activities" | grep -F "$component"
+visible=false
+for attempt in {1..8}; do
+    activities="$(adb shell dumpsys activity activities)"
+    windows="$(adb shell dumpsys window windows)"
+    if grep -E 'topResumedActivity|mResumedActivity|mCurrentFocus' <<< "$activities"
+crashes="$(adb logcat -d -s AndroidRuntime:E)"
+if grep -Fq "Process: $package," <<< "$crashes"; then
+    printf '%s\n' "$crashes"
+    exit 1
+fi
+echo "PASS Android 13: release APK installed and its activity resumed."
+\n'"$windows" | grep -F "$component"; then
+        visible=true
+        break
+    fi
+    sleep 2
+done
+if [[ "$visible" != true ]]; then
+    printf '%s\n' "$activities" "$windows" | grep -E 'ResumedActivity|mCurrentFocus|midipro' || true
+    exit 1
+fi
 crashes="$(adb logcat -d -s AndroidRuntime:E)"
 if grep -Fq "Process: $package," <<< "$crashes"; then
     printf '%s\n' "$crashes"
