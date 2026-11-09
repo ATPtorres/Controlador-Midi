@@ -3,7 +3,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
-    <application android:name=".MidiApplication" android:label="@string/app_name"
+    <application android:name=".MidiApplication" android:label="${controllerAppLabel}"
         android:theme="@style/AppTheme" android:icon="@drawable/ic_controller" android:allowBackup="false">
         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|keyboardHidden">

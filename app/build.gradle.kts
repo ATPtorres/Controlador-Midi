@@ -14,8 +14,18 @@ android {
         applicationId = "com.alemnt.midipro"
         minSdk = 33
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
+        manifestPlaceholders["controllerAppLabel"] = "@string/app_name"
+    }
+    buildTypes {
+        debug {
+            if (providers.gradleProperty("githubTestApk").orNull == "true") {
+                applicationIdSuffix = ".githubtest"
+                versionNameSuffix = "-github-test"
+                manifestPlaceholders["controllerAppLabel"] = "MIDI Performance Controller Pro (Pruebas)"
+            }
+        }
     }
     buildFeatures { compose = true }
     compileOptions {

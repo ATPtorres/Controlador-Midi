@@ -36,13 +36,16 @@ jobs:
             fi
           done
           exit 1
-      - run: gradle --no-daemon :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+      - run: gradle --no-daemon -PgithubTestApk=true :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
       - name: Verify APK signature
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk MIDI-Performance-Controller-Pro.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose MIDI-Performance-Controller-Pro.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MIDI-Performance-Controller-Pro-GitHub-Test.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-GitHub-Test.apk
+          badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MIDI-Performance-Controller-Pro-GitHub-Test.apk)"
+          grep -F "package: name='com.alemnt.midipro.githubtest'" <<< "$badging"
+          grep -Fx "sdkVersion:'33'" <<< "$badging"
       - uses: actions/upload-artifact@v4
         with:
-          name: MIDI-Performance-Controller-Pro
-          path: MIDI-Performance-Controller-Pro.apk
+          name: MIDI-Performance-Controller-Pro-GitHub-Test
+          path: MIDI-Performance-Controller-Pro-GitHub-Test.apk
           if-no-files-found: error
