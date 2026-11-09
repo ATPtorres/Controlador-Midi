@@ -4,13 +4,13 @@ El puente recibe MIDI 1.0 desde el teléfono y lo entrega a una entrada estánda
 
 ## Windows y Waveform Free
 
-1. Instala [Python 3](https://www.python.org/downloads/windows/) y [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html). Abre loopMIDI y crea un puerto llamado exactamente **MIDI Performance Controller Pro**.
+1. Instala [Python 3.12](https://www.python.org/downloads/windows/) y [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html). Abre loopMIDI y crea un puerto llamado exactamente **MIDI Performance Controller Pro**.
 2. Extrae esta carpeta. Ábrela en el Explorador, escribe `cmd` en la barra de dirección y pulsa Enter.
 3. Ejecuta estos comandos en esa ventana.
 
    ```bat
-   py -3 -m pip install -r requirements.txt
-   py -3 midi_bridge.py
+   py -3.12 -m pip install -r requirements.txt
+   py -3.12 midi_bridge.py
    ```
 
 4. Conecta el teléfono y la PC a la misma red local. Si Windows pide permiso de red para Python, usa solo la red privada. El puente muestra la IP local y un código de seis dígitos.
@@ -29,7 +29,7 @@ Para evitar depender del modo USB MIDI del teléfono y de la red local, instala 
 adb reverse tcp:31459 tcp:31459
 ```
 
-En la PC, inicia el puente con `python midi_bridge.py --bind 127.0.0.1`. En Android, usa **127.0.0.1** como IP y el código de la consola. En Windows, si usas el lanzador Python, reemplaza `python` por `py -3`.
+En la PC, inicia el puente con `python midi_bridge.py --bind 127.0.0.1`. En Android, usa **127.0.0.1** como IP y el código de la consola. En Windows, si usas el lanzador Python, reemplaza `python` por `py -3.12`.
 
 ## Diagnóstico
 
