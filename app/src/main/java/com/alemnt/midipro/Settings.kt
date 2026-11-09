@@ -149,6 +149,9 @@ private fun MidiPanel(p: Preset, status: MidiStatus, model: ControllerModel, sca
     val bluetooth by model.bluetooth.peripherals.collectAsStateWithLifecycle()
     val feedback by model.bluetooth.feedback.collectAsStateWithLifecycle()
     var mode by remember { mutableStateOf<Wire?>(null) }
+    var bridgeExpanded by remember { mutableStateOf(false) }
+    var host by remember { mutableStateOf(model.lastBridgeHost()) }
+    var code by remember { mutableStateOf("") }
     val protocol = when (status.wire) {
         Wire.BYTES -> "MIDI 1.0"
         Wire.UMP1 -> "UMP · MIDI 1.0"
@@ -157,10 +160,27 @@ private fun MidiPanel(p: Preset, status: MidiStatus, model: ControllerModel, sca
     Text(status.label, fontWeight = FontWeight.Bold)
     Hint("$protocol · ${status.sent} eventos enviados")
     if (status.destination != null) TextButton(onClick = model.midi::disconnect) { Text("Desconectar") }
+    TextButton(onClick = { bridgeExpanded = !bridgeExpanded }) {
+        Text(if (bridgeExpanded) "Ocultar puente MIDI" else "Conectar por Wi-Fi o USB con puente")
+    }
+    if (bridgeExpanded) {
+        Hint("Abre el puente en la PC. Introduce la IP que muestra o usa 127.0.0.1 con adb reverse.")
+        OutlinedTextField(host, { host = it.take(64) }, label = { Text("Dirección IP de la PC") },
+            singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(code, { code = it.filter { digit -> digit in '0'..'9' }.take(6) },
+            label = { Text("Código del puente") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        Button(onClick = { model.connectBridge(host.trim(), code) },
+            enabled = host.isNotBlank() && code.length == 6) { Text("Conectar puente") }
+    }
     SwitchLine("Salida virtual Android", p.virtual) { enabled -> model.change { it.copy(virtual = enabled) } }
     Hint("${status.virtualClients} clientes virtuales. En otra app Android abre «Controller Out» o «Controller UMP» en Android 15+.")
     HorizontalDivider()
     Text("Puertos del sistema", fontWeight = FontWeight.SemiBold)
+    TextButton(onClick = model.midi::scanPorts) { Text("Actualizar puertos") }
+    if (destinations.none { it.usbPeripheral }) {
+        Hint("Android no expone el puerto USB del teléfono. Elige MIDI en las opciones USB de Android o usa el puente.")
+    }
     SelectMenu(mode?.name ?: "Protocolo automático",
         listOf(null to "Automático", Wire.UMP1 to "UMP MIDI 1.0", Wire.UMP2 to "UMP MIDI 2.0"), { mode = it })
     IntControl("Grupo UMP", p.group + 1, 1..16) { value -> model.change { it.copy(group = value - 1) } }

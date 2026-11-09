@@ -3,6 +3,9 @@ package com.alemnt.midi
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.content.Context
+import android.hardware.usb.UsbDevice
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiInputPort
@@ -20,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class Destination(val info: MidiDeviceInfo, val port: Int, val name: String, val ump: Boolean) {
     val id get() = "${info.id}:$port:$ump"
+    val usbPeripheral get() = !ump && info.type == MidiDeviceInfo.TYPE_USB &&
+        info.properties.getParcelable(MidiDeviceInfo.PROPERTY_USB_DEVICE, UsbDevice::class.java) == null
 }
 data class MidiStatus(
     val destination: String? = null,
@@ -45,6 +50,11 @@ class MidiEngine(context: Context) {
     private var bpm = 120
     private var sendClock = true
     private var running = false
+    private var click: ToneGenerator? = null
+    private var beatPulse = 0
+    private var lan: LanMidiOutput? = null
+    private var opening = false
+    private var autoUsb = true
     private val _destinations = MutableStateFlow<List<Destination>>(emptyList())
     val destinations = _destinations.asStateFlow()
     private val _status = MutableStateFlow(MidiStatus())
@@ -59,27 +69,30 @@ class MidiEngine(context: Context) {
     private val counts = mutableMapOf<Pair<Int, Int>, Int>()
 
     init {
-        val callback = object : MidiManager.DeviceCallback() {
-            override fun onDeviceAdded(info: MidiDeviceInfo) = refresh()
-            override fun onDeviceRemoved(info: MidiDeviceInfo) {
-                refresh()
-                if (device?.info?.id == info.id) {
-                    generation++
-                    close("Dispositivo desconectado")
-                }
-            }
-        }
         listOf(MidiManager.TRANSPORT_MIDI_BYTE_STREAM, MidiManager.TRANSPORT_UNIVERSAL_MIDI_PACKETS)
-            .forEach { transport -> manager?.registerDeviceCallback(transport, worker, callback) }
-        refresh()
+            .forEach { transport ->
+                manager?.registerDeviceCallback(transport, worker, object : MidiManager.DeviceCallback() {
+                    override fun onDeviceAdded(info: MidiDeviceInfo) = refresh()
+                    override fun onDeviceRemoved(info: MidiDeviceInfo) {
+                        if (device?.info?.id == info.id) {
+                            generation++
+                            close("Dispositivo desconectado")
+                        }
+                        refresh()
+                    }
+                })
+            }
+        worker.execute(::refresh)
     }
+
+    fun scanPorts() = worker.execute(::refresh)
 
     private fun refresh() {
         if (manager == null) return
         _destinations.value = listOf(false, true).flatMap { ump ->
             val transport = if (ump) MidiManager.TRANSPORT_UNIVERSAL_MIDI_PACKETS
                 else MidiManager.TRANSPORT_MIDI_BYTE_STREAM
-            manager.getDevicesForTransport(transport).flatMap { info ->
+            devices(transport, ump).flatMap { info ->
                 val label = info.properties.getString(MidiDeviceInfo.PROPERTY_NAME) ?: "MIDI ${info.id}"
                 info.ports.filter { it.type == MidiDeviceInfo.PortInfo.TYPE_INPUT && it.name != "Controller UMP" }.map { port ->
                     val type = when (info.type) {
@@ -92,30 +105,54 @@ class MidiEngine(context: Context) {
                 }
             }
         }
+        if (autoUsb && !opening && _status.value.destination == null) {
+            _destinations.value.singleOrNull { it.usbPeripheral }?.let { openPort(it, null) }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun devices(transport: Int, ump: Boolean): List<MidiDeviceInfo> {
+        val current = manager?.getDevicesForTransport(transport).orEmpty()
+        return if (ump) current.toList()
+            else (current + manager?.devices.orEmpty()).distinctBy { it.id }
     }
 
     fun open(destination: Destination, force: Wire?) = worker.execute {
-        val service = manager ?: return@execute
+        autoUsb = destination.usbPeripheral
+        openPort(destination, force)
+    }
+
+    private fun openPort(destination: Destination, force: Wire?) {
+        val service = manager ?: return
         val ticket = ++generation
         close("Abriendo ${destination.name}…")
-        service.openDevice(destination.info, { opened ->
-            worker.execute {
-                if (ticket != generation) {
-                    opened?.close()
-                } else {
-                    val wire = if (!destination.ump) Wire.BYTES else force ?:
-                        if ((opened?.info?.defaultProtocol ?: 0) >= 17) Wire.UMP2 else Wire.UMP1
-                    bind(opened, destination.port, destination.id, destination.name, wire)
+        opening = true
+        try {
+            service.openDevice(destination.info, { opened ->
+                worker.execute {
+                    if (ticket != generation) {
+                        opened?.close()
+                    } else {
+                        val wire = if (!destination.ump) Wire.BYTES else force ?:
+                            if ((opened?.info?.defaultProtocol ?: 0) >= 17) Wire.UMP2 else Wire.UMP1
+                        bind(opened, destination.port, destination.id, destination.name, wire)
+                    }
                 }
-            }
-        }, main)
+            }, main)
+        } catch (_: IllegalArgumentException) {
+            close("El puerto MIDI ya no está disponible")
+        } catch (_: SecurityException) {
+            close("Android rechazó el acceso a ese puerto")
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun openBluetooth(peripheral: BluetoothDevice, label: String) = worker.execute {
         val service = manager ?: return@execute
+        autoUsb = false
         val ticket = ++generation
         close("Conectando por Bluetooth…")
+        opening = true
         try {
             service.openBluetoothDevice(peripheral, { opened ->
                 worker.execute {
@@ -132,6 +169,7 @@ class MidiEngine(context: Context) {
     }
 
     private fun bind(opened: MidiDevice?, number: Int, id: String, label: String, wire: Wire) {
+        opening = false
         val newPort = if (number >= 0) opened?.openInputPort(number) else null
         if (opened == null || newPort == null) {
             opened?.close()
@@ -143,7 +181,26 @@ class MidiEngine(context: Context) {
         _status.value = _status.value.copy(destination = id, label = label, wire = wire)
     }
 
+    fun connectLan(host: String, code: String) = worker.execute {
+        if (host.isBlank() || code.length != 6 || code.any { it !in '0'..'9' }) return@execute
+        autoUsb = false
+        val ticket = ++generation
+        close("Conectando al puente en $host…")
+        opening = true
+        lan = LanMidiOutput(host, code, onReady = {
+            worker.execute {
+                if (ticket == generation) {
+                    opening = false
+                    _status.value = _status.value.copy(destination = "lan:$host", label = "Puente MIDI · $host")
+                }
+            }
+        }, onClosed = { reason ->
+            worker.execute { if (ticket == generation) close(reason) }
+        }).also { it.start() }
+    }
+
     fun disconnect() = worker.execute {
+        autoUsb = false
         generation++
         close("Sin destino físico")
     }
@@ -154,6 +211,9 @@ class MidiEngine(context: Context) {
         runCatching { device?.close() }
         port = null
         device = null
+        lan?.close()
+        lan = null
+        opening = false
         _status.value = _status.value.copy(destination = null, label = label, wire = Wire.BYTES)
     }
 
@@ -209,7 +269,17 @@ class MidiEngine(context: Context) {
         sendClock = enabled
     }
 
+    fun metronome(enabled: Boolean) = worker.execute {
+        if (enabled && click == null) {
+            click = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 62) }.getOrNull()
+        } else if (!enabled) {
+            click?.release()
+            click = null
+        }
+    }
+
     fun startClock(resume: Boolean) = worker.execute {
+        if (!resume) beatPulse = 0
         tick?.cancel(false)
         transmit(Message.System(if (resume) 0xFB else 0xFA))
         running = true
@@ -222,6 +292,7 @@ class MidiEngine(context: Context) {
         running = false
         tick?.cancel(false)
         tick = null
+        click?.stopTone()
         if (wasRunning) transmit(Message.System(0xFC))
     }
 
@@ -229,6 +300,8 @@ class MidiEngine(context: Context) {
         if (!running) return
         val now = System.nanoTime()
         val interval = 60_000_000_000L / (bpm * 24)
+        if (beatPulse == 0) click?.startTone(ToneGenerator.TONE_PROP_BEEP, 45)
+        beatPulse = (beatPulse + 1) % 24
         if (sendClock) transmit(Message.System(0xF8))
         pulseAt = maxOf(pulseAt + interval, now + interval / 2)
         tick = worker.schedule(::pulse, (pulseAt - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS)
@@ -262,6 +335,7 @@ class MidiEngine(context: Context) {
                 _status.value = current.copy(destination = null, label = "Conexión MIDI perdida", wire = Wire.BYTES)
             }
         }
+        lan?.let { sent = it.send(MidiCodec.encode(message, Wire.BYTES)) || sent }
         if (virtualEnabled) virtual.forEach { (wire, target) ->
             sent = deliver(target.first, wire, if (wire == Wire.BYTES) 0 else group) || sent
         }

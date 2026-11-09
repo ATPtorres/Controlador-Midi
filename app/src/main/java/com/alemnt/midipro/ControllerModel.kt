@@ -56,6 +56,7 @@ class ControllerModel @Inject constructor(
         midi.virtualEnabled(preset.value.virtual)
         midi.setGroup(preset.value.group)
         midi.clockSettings(preset.value.bpm, preset.value.clock)
+        midi.metronome(preset.value.metronome)
         viewModelScope.launch {
             var destination: String? = null
             midi.status.collect { state ->
@@ -80,6 +81,7 @@ class ControllerModel @Inject constructor(
             old.smartOctaves != new.smartOctaves || old.virtual != new.virtual || old.group != new.group) release()
         if (old.virtual != new.virtual) midi.virtualEnabled(new.virtual)
         if (old.group != new.group) midi.setGroup(new.group)
+        if (old.metronome != new.metronome) midi.metronome(new.metronome)
         if (old.bpm != new.bpm || old.clock != new.clock) midi.clockSettings(new.bpm, new.clock)
         if (old.channel != new.channel) lastValue.fill(-1)
         _preset.value = new
@@ -88,6 +90,13 @@ class ControllerModel @Inject constructor(
             delay(180)
             storage.edit().putString("live", json.encodeToString(Preset.serializer(), new)).apply()
         }
+    }
+
+    fun lastBridgeHost(): String = storage.getString("bridgeHost", "").orEmpty()
+
+    fun connectBridge(host: String, code: String) {
+        storage.edit().putString("bridgeHost", host).apply()
+        midi.connectLan(host, code)
     }
 
     fun select(page: SurfacePage) {

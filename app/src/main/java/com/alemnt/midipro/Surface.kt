@@ -96,8 +96,19 @@ private fun keyboard(page: SurfacePage, p: Preset, width: Float, height: Float, 
 private fun layout(page: SurfacePage, p: Preset, width: Float, height: Float, density: Float,
                    offset: Float): List<Key> {
     if (page == SurfacePage.PIANO || page == SurfacePage.SCALE) return keyboard(page, p, width, height, density, offset)
-    val columns = when (page) { SurfacePage.CHORDS -> 7; SurfacePage.FADERS -> 6; else -> 4 }
-    val rows = when (page) { SurfacePage.CHORDS -> 3; SurfacePage.GRID -> 6; SurfacePage.PADS -> 2; else -> 1 }
+    val wideGrid = page == SurfacePage.GRID && width > height * 1.65f
+    val columns = when (page) {
+        SurfacePage.CHORDS -> 7
+        SurfacePage.FADERS -> 6
+        SurfacePage.GRID -> if (wideGrid) 8 else 4
+        else -> 4
+    }
+    val rows = when (page) {
+        SurfacePage.CHORDS -> 3
+        SurfacePage.GRID -> if (wideGrid) 3 else 6
+        SurfacePage.PADS -> 2
+        else -> 1
+    }
     val gap = 5 * density
     val w = width / columns
     val h = height / rows

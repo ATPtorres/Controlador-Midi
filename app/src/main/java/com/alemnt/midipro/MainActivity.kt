@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
             val page by model.page.collectAsStateWithLifecycle()
             val preset by model.preset.collectAsStateWithLifecycle()
             LaunchedEffect(page) {
-                val orientation = if (page == SurfacePage.GRID) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                val orientation = if (page == SurfacePage.GRID) ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
                     else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 if (requestedOrientation != orientation) requestedOrientation = orientation
             }
@@ -133,7 +133,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
             val compact = maxHeight < 430.dp
             val broad = maxWidth > 760.dp
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 7.dp)) {
-                TransportBar(transport, p.bpm, status, p.virtual, compact, broad, grid, model) { panel = it }
+                TransportBar(transport, p.bpm, status, p.virtual, p.metronome, compact, broad, maxHeight > maxWidth, model) { panel = it }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (grid) {
@@ -210,7 +210,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
 
 @Composable
 private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, virtualEnabled: Boolean,
-                         compact: Boolean, broad: Boolean, portrait: Boolean,
+                         metronome: Boolean, compact: Boolean, broad: Boolean, portrait: Boolean,
                          model: ControllerModel, open: (String) -> Unit) {
     val elapsed = t.elapsedMs / 1000
     val time = String.format(Locale.ROOT, "%02d:%02d", elapsed / 60, elapsed % 60)
@@ -243,6 +243,8 @@ private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, virtualEnab
                         modifier = Modifier.semantics { contentDescription = name })
                 }
             }
+            FilterChip(metronome, { model.change { it.copy(metronome = !it.metronome) } },
+                { Text("Metrónomo", maxLines = 1) })
             if (!portrait) TransportIndicators(time, bpm, status, virtualEnabled, open)
         }
         if (portrait) {

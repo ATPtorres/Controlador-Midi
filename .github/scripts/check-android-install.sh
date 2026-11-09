@@ -2,7 +2,7 @@
 set -euo pipefail
 
 apk="$1"
-package=com.alemnt.midipro.mobile
+package=com.alemnt.midipro.bridge
 component="$package/com.alemnt.midipro.MainActivity"
 
 test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = 33
@@ -12,7 +12,7 @@ trap 'if (( $? != 0 )); then adb logcat -d -t 250; fi' EXIT
 
 adb install --no-streaming "$apk" | grep -Fx 'Success'
 installed="$(adb shell dumpsys package "$package")"
-grep -F 'versionName=1.0.2' <<< "$installed"
+grep -F 'versionName=1.1.0' <<< "$installed"
 launch="$(adb shell am start -W -n "$component")"
 printf '%s\n' "$launch"
 grep -F 'Status: ok' <<< "$launch"

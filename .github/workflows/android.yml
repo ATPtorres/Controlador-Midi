@@ -36,6 +36,8 @@ jobs:
             fi
           done
           exit 1
+      - name: Test desktop MIDI bridge
+        run: python3 -m unittest discover -s desktop -v
       - name: Build standalone release APK
         run: gradle --no-daemon -PstandaloneApk=true :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease
       - name: Sign and verify release APK
@@ -47,11 +49,11 @@ jobs:
           "$sdk/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/midi-aligned.apk"
           "$sdk/apksigner" sign --ks "$RUNNER_TEMP/midi-test.p12" --ks-pass pass:android-test \
             --v2-signing-enabled true --v3-signing-enabled true \
-            --out MIDI-Performance-Controller-Pro-v1.0.2.apk "$RUNNER_TEMP/midi-aligned.apk"
-          "$sdk/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-v1.0.2.apk
-          "$sdk/zipalign" -c -P 16 4 MIDI-Performance-Controller-Pro-v1.0.2.apk
-          badging="$("$sdk/aapt" dump badging MIDI-Performance-Controller-Pro-v1.0.2.apk)"
-          grep -F "package: name='com.alemnt.midipro.mobile' versionCode='3'" <<< "$badging"
+            --out MIDI-Performance-Controller-Pro-v1.1.0.apk "$RUNNER_TEMP/midi-aligned.apk"
+          "$sdk/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-v1.1.0.apk
+          "$sdk/zipalign" -c -P 16 4 MIDI-Performance-Controller-Pro-v1.1.0.apk
+          badging="$("$sdk/aapt" dump badging MIDI-Performance-Controller-Pro-v1.1.0.apk)"
+          grep -F "package: name='com.alemnt.midipro.bridge' versionCode='4'" <<< "$badging"
           grep -Fx "sdkVersion:'33'" <<< "$badging"
           grep -F "'arm64-v8a'" <<< "$badging"
           if grep -q '^application-debuggable' <<< "$badging"; then exit 1; fi
@@ -67,9 +69,9 @@ jobs:
           arch: x86_64
           emulator-boot-timeout: 300
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash .github/scripts/check-android-install.sh MIDI-Performance-Controller-Pro-v1.0.2.apk
+          script: bash .github/scripts/check-android-install.sh MIDI-Performance-Controller-Pro-v1.1.0.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MIDI-Performance-Controller-Pro-v1.0.2
-          path: MIDI-Performance-Controller-Pro-v1.0.2.apk
+          name: MIDI-Performance-Controller-Pro-v1.1.0
+          path: MIDI-Performance-Controller-Pro-v1.1.0.apk
           if-no-files-found: error

@@ -84,6 +84,7 @@ data class Preset(
     val group: Int = 0,
     val bpm: Int = 120,
     val clock: Boolean = true,
+    val metronome: Boolean = false,
     val bankMsb: Int = 0,
     val bankLsb: Int = 0,
     val program: Int = 0,
