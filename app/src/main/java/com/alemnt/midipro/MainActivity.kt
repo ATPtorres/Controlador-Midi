@@ -132,8 +132,9 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
         BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
             val compact = maxHeight < 430.dp
             val broad = maxWidth > 760.dp
+            val portrait = maxHeight > maxWidth
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 7.dp)) {
-                TransportBar(transport, p.bpm, status, p.virtual, p.metronome, compact, broad, maxHeight > maxWidth, model) { panel = it }
+                TransportBar(transport, p.bpm, status, p.virtual, p.metronome, compact, broad, portrait, model) { panel = it }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (grid) {
