@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.alemnt.midi.DawControl
 import com.alemnt.midi.MidiStatus
 import com.alemnt.midi.Wire
 import kotlin.math.roundToInt
@@ -127,8 +128,15 @@ fun ConfigPanel(panel: String, page: SurfacePage, p: Preset, status: MidiStatus,
                 SwitchLine("Vibración háptica", p.haptics) { enabled -> model.change { it.copy(haptics = enabled) } }
                 SwitchLine("Tema oscuro", p.dark) { enabled -> model.change { it.copy(dark = enabled) } }
                 HorizontalDivider()
-                IntControl("BPM", p.bpm, 30..300) { value -> model.change { it.copy(bpm = value) } }
-                SwitchLine("Enviar MIDI Clock", p.clock) { enabled -> model.change { it.copy(clock = enabled) } }
+                SwitchLine("Transporte maestro del DAW", p.dawTransport) { enabled ->
+                    model.change { it.copy(dawTransport = enabled) }
+                }
+                if (p.dawTransport) {
+                    Hint("Importa el perfil de Waveform o asigna CC 110–114 en canal 16. El tempo lo controla el DAW.")
+                } else {
+                    IntControl("BPM local", p.bpm, 30..300) { value -> model.change { it.copy(bpm = value) } }
+                    SwitchLine("Enviar MIDI Clock", p.clock) { enabled -> model.change { it.copy(clock = enabled) } }
+                }
                 var bend by remember { mutableFloatStateOf(8192f) }
                 Text("Pitch Bend · ${bend.roundToInt() - 8192}")
                 Slider(bend, { bend = it; model.bend(it.roundToInt()) }, valueRange = 0f..16383f,
@@ -244,9 +252,16 @@ fun EditCell(page: SurfacePage, index: Int, p: Preset, model: ControllerModel, d
             var fader by remember(index) { mutableStateOf(p.faders[index]) }
             Panel("Fader ${index + 1}", dismiss, {
                 Button(onClick = {
-                    model.change { it.copy(faders = it.faders.replace(index, fader)) }; dismiss()
+                    model.change { it.copy(faders = it.faders.replace(index, fader.copy(name = fader.name.trim()))) }; dismiss()
                 }) { Text("Guardar") }
             }) {
+                OutlinedTextField(fader.name, { name ->
+                    fader = fader.copy(name = name.filterNot(Char::isISOControl).take(MAX_FADER_NAME))
+                }, label = { Text("Nombre del fader") }, placeholder = { Text("Ej. Corte del filtro") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (p.dawTransport && p.channel == DawControl.CHANNEL && DawControl.entries.any { it.cc == fader.cc }) {
+                    Hint("CC ${fader.cc} está reservado al transporte en canal 16. Usa otro CC o canal para este fader.")
+                }
                 IntControl("Control Change", fader.cc, 0..127) { fader = fader.copy(cc = it) }
                 SelectMenu(fader.curve.label, Curve.entries.map { it to it.label }, { fader = fader.copy(curve = it) })
                 SwitchLine("Alta resolución · 14 bits", fader.fine) { fader = fader.copy(fine = it) }

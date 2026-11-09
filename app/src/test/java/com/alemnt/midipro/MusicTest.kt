@@ -1,5 +1,6 @@
 package com.alemnt.midipro
 
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,5 +32,19 @@ class MusicTest {
         val moved = initial.copy(chordOrder = order)
         assertEquals(initial.chord(0), moved.chord(9))
         assertEquals(listOf(51, 55, 58, 60), moved.chord(9)?.notes)
+    }
+
+    @Test fun faderNamesRoundTripAndOldPresetsStillLoad() {
+        val json = Json { encodeDefaults = true }
+        val original = Preset()
+        val named = original.copy(faders = original.faders.replace(0, original.faders[0].copy(name = "Corte")))
+        val encoded = json.encodeToString(Preset.serializer(), named)
+        val decoded = json.decodeFromString<Preset>(encoded)
+        assertEquals(named, decoded)
+        assertTrue(decoded.valid())
+
+        val old = json.decodeFromString<Preset>("{}")
+        assertTrue(old.valid())
+        assertEquals("", old.faders[0].name)
     }
 }

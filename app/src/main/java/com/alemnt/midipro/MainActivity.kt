@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        model.stop()
+        model.stopLocal()
         model.bluetooth.stop()
         super.onStop()
     }
@@ -134,7 +134,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
             val broad = maxWidth > 760.dp
             val portrait = maxHeight > maxWidth
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 7.dp)) {
-                TransportBar(transport, p.bpm, status, p.virtual, p.metronome, compact, broad, portrait, model) { panel = it }
+                TransportBar(transport, p.bpm, status, p.virtual, p.metronome, p.dawTransport, compact, broad, portrait, model) { panel = it }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (grid) {
@@ -211,10 +211,13 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
 
 @Composable
 private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, virtualEnabled: Boolean,
-                         metronome: Boolean, compact: Boolean, broad: Boolean, portrait: Boolean,
+                         metronome: Boolean, dawTransport: Boolean, compact: Boolean, broad: Boolean, portrait: Boolean,
                          model: ControllerModel, open: (String) -> Unit) {
     val elapsed = t.elapsedMs / 1000
-    val time = String.format(Locale.ROOT, "%02d:%02d", elapsed / 60, elapsed % 60)
+    val time = if (dawTransport) "DAW" else String.format(Locale.ROOT, "%02d:%02d", elapsed / 60, elapsed % 60)
+    val playing = if (dawTransport) status.daw.playing == true else t.playing
+    val recording = if (dawTransport) status.daw.recording == true else t.recording
+    val click = if (dawTransport) status.daw.click == true else metronome
     val height = if (compact) 40.dp else 49.dp
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
         .padding(horizontal = 5.dp, vertical = 2.dp)) {
@@ -225,9 +228,9 @@ private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, virtualEnab
                     color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 7.dp))
             }
             listOf(
-                Triple("▶", t.playing, model::play),
-                Triple("Ⅱ", !t.playing && t.elapsedMs > 0, model::pause),
-                Triple("●", t.recording, model::record),
+                Triple("▶", playing, model::play),
+                Triple("Ⅱ", !dawTransport && !t.playing && t.elapsedMs > 0, model::pause),
+                Triple("●", recording, model::record),
                 Triple("■", false, model::stop)
             ).forEachIndexed { i, (symbol, active, action) ->
                 val name = listOf("Play", "Pause", "Record", "Stop")[i]
@@ -244,24 +247,24 @@ private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, virtualEnab
                         modifier = Modifier.semantics { contentDescription = name })
                 }
             }
-            FilterChip(metronome, { model.change { it.copy(metronome = !it.metronome) } },
-                { Text("Metrónomo", maxLines = 1) })
-            if (!portrait) TransportIndicators(time, bpm, status, virtualEnabled, open)
+            FilterChip(click, model::toggleMetronome,
+                { Text(if (dawTransport) "Metrónomo DAW" else "Metrónomo", maxLines = 1) })
+            if (!portrait) TransportIndicators(time, bpm.takeUnless { dawTransport }, status, virtualEnabled, open)
         }
         if (portrait) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                TransportIndicators(time, bpm, status, virtualEnabled, open)
+                TransportIndicators(time, bpm.takeUnless { dawTransport }, status, virtualEnabled, open)
             }
         }
     }
 }
 
 @Composable
-private fun TransportIndicators(time: String, bpm: Int, status: MidiStatus, virtualEnabled: Boolean,
+private fun TransportIndicators(time: String, bpm: Int?, status: MidiStatus, virtualEnabled: Boolean,
                                 open: (String) -> Unit) {
     Text(time, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 4.dp))
-    TextButton(onClick = { open("ajustes") }) { Text("$bpm BPM", maxLines = 1, fontSize = 11.sp) }
+    if (bpm != null) TextButton(onClick = { open("ajustes") }) { Text("$bpm BPM", maxLines = 1, fontSize = 11.sp) }
     val connected = status.destination != null || (status.virtualClients > 0 && virtualEnabled)
     TextButton(onClick = { open("midi") }) {
         Text(if (connected) "● MIDI" else "○ MIDI", maxLines = 1, fontSize = 12.sp,

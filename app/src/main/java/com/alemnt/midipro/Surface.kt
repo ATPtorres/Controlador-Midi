@@ -135,7 +135,9 @@ private fun layout(page: SurfacePage, p: Preset, width: Float, height: Float, de
                     else degrees[index % columns], p.chordOrder[index] % columns)
             }
             SurfacePage.FADERS -> p.faders[index].run {
-                Key(index, box, emptyList(), "CC $cc", output(value).toString(), color)
+                val controller = "CC $cc"
+                val detail = if (name.isBlank()) output(value).toString() else "$controller · ${output(value)}"
+                Key(index, box, emptyList(), name.ifBlank { controller }, detail, color)
             }
             else -> error("Keyboard is laid out separately")
         }
@@ -310,8 +312,8 @@ fun PerformanceSurface(page: SurfacePage, p: Preset, model: ControllerModel, lat
                                 drawCircle(accent.copy(alpha = .24f), 13 * density, Offset(x, y))
                                 drawRoundRect(accent, Offset(x - 13 * density, y - 5 * density),
                                     Size(26 * density, 10 * density), CornerRadius(4 * density))
-                                label(key.title, x, r.top + 17 * density, 12 * density, ink)
-                                label(key.detail, x, r.bottom - 8 * density, 11 * density, muted)
+                                label(key.title, x, r.top + 17 * density, 12 * density, ink, r.width - 10 * density)
+                                label(key.detail, x, r.bottom - 8 * density, 11 * density, muted, r.width - 10 * density)
                             }
                             else -> {
                                 val highlight = active || drag?.second == key.index

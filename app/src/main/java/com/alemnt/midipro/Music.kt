@@ -49,9 +49,11 @@ data class Voicing(val size: Int = 3, val inversion: Int = 0, val custom: List<I
 
 enum class Curve(val label: String) { LINEAR("Lineal"), LOG("Logarítmica"), EXP("Exponencial") }
 
+const val MAX_FADER_NAME = 32
+
 @Serializable
 data class Fader(val cc: Int, val color: Int, val value: Float = 0f, val fine: Boolean = true,
-                 val curve: Curve = Curve.LINEAR) {
+                 val curve: Curve = Curve.LINEAR, val name: String = "") {
     fun output(position: Float): Int {
         val curved = when (curve) {
             Curve.LINEAR -> position
@@ -85,6 +87,7 @@ data class Preset(
     val bpm: Int = 120,
     val clock: Boolean = true,
     val metronome: Boolean = false,
+    val dawTransport: Boolean = true,
     val bankMsb: Int = 0,
     val bankLsb: Int = 0,
     val program: Int = 0,
@@ -106,7 +109,8 @@ data class Preset(
             (it.custom.size.takeIf { size -> size > 0 } ?: it.size) &&
             it.custom.size <= 8 && it.custom.all { note -> note in -24..36 } } &&
         chordOrder.sorted() == (0..20).toList() &&
-        faders.size == 6 && faders.all { it.cc in 0..127 && it.color in palette.indices && it.value in 0f..1f }
+        faders.size == 6 && faders.all { it.cc in 0..127 && it.color in palette.indices && it.value in 0f..1f &&
+            it.name.length <= MAX_FADER_NAME && it.name.none(Char::isISOControl) }
 
     fun grid(): List<Int> {
         val offset = minOf((octave + 1) * 12 + root, 127 - scale.offset(23))

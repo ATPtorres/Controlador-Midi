@@ -10,6 +10,7 @@ import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiInputPort
 import android.media.midi.MidiManager
+import android.media.midi.MidiOutputPort
 import android.media.midi.MidiReceiver
 import android.os.Handler
 import android.os.Looper
@@ -33,7 +34,8 @@ data class MidiStatus(
     val virtualClients: Int = 0,
     val sent: Long = 0,
     val lastNoteOn: Int? = null,
-    val lastNoteAt: Long = 0
+    val lastNoteAt: Long = 0,
+    val daw: DawFeedback = DawFeedback()
 )
 
 class MidiEngine(context: Context) {
@@ -61,6 +63,8 @@ class MidiEngine(context: Context) {
     val status = _status.asStateFlow()
     private var device: MidiDevice? = null
     private var port: MidiInputPort? = null
+    private var feedbackPort: MidiOutputPort? = null
+    private var rewind: ScheduledFuture<*>? = null
     private val virtual = mutableMapOf<Wire, Pair<MidiReceiver, Int>>()
     private var group = 0
     private var generation = 0
@@ -135,7 +139,7 @@ class MidiEngine(context: Context) {
                     } else {
                         val wire = if (!destination.ump) Wire.BYTES else force ?:
                             if ((opened?.info?.defaultProtocol ?: 0) >= 17) Wire.UMP2 else Wire.UMP1
-                        bind(opened, destination.port, destination.id, destination.name, wire)
+                        bind(opened, destination.port, destination.id, destination.name, wire, destination.usbPeripheral)
                     }
                 }
             }, main)
@@ -168,7 +172,8 @@ class MidiEngine(context: Context) {
         }
     }
 
-    private fun bind(opened: MidiDevice?, number: Int, id: String, label: String, wire: Wire) {
+    private fun bind(opened: MidiDevice?, number: Int, id: String, label: String, wire: Wire,
+                     usbFeedback: Boolean = false) {
         opening = false
         val newPort = if (number >= 0) opened?.openInputPort(number) else null
         if (opened == null || newPort == null) {
@@ -179,6 +184,24 @@ class MidiEngine(context: Context) {
         device = opened
         port = newPort
         _status.value = _status.value.copy(destination = id, label = label, wire = wire)
+        if (usbFeedback && opened.info.outputPortCount > 0) {
+            feedbackPort = runCatching { opened.openOutputPort(0) }.getOrNull()
+            val ticket = generation
+            val reader = DawFeedbackReader { cc, value ->
+                worker.execute {
+                    if (ticket == generation && device === opened) {
+                        val current = _status.value
+                        val feedback = current.daw.withControl(cc, value)
+                        if (current.daw != feedback) _status.value = current.copy(daw = feedback)
+                    }
+                }
+            }
+            feedbackPort?.connect(object : MidiReceiver() {
+                override fun onSend(data: ByteArray, offset: Int, count: Int, timestamp: Long) {
+                    reader.accept(data, offset, count)
+                }
+            })
+        }
     }
 
     fun connectLan(host: String, code: String) = worker.execute {
@@ -206,7 +229,11 @@ class MidiEngine(context: Context) {
     }
 
     private fun close(label: String) {
+        rewind?.cancel(false)
+        rewind = null
         releaseAll()
+        runCatching { feedbackPort?.close() }
+        feedbackPort = null
         runCatching { port?.close() }
         runCatching { device?.close() }
         port = null
@@ -214,7 +241,7 @@ class MidiEngine(context: Context) {
         lan?.close()
         lan = null
         opening = false
-        _status.value = _status.value.copy(destination = null, label = label, wire = Wire.BYTES)
+        _status.value = _status.value.copy(destination = null, label = label, wire = Wire.BYTES, daw = DawFeedback())
     }
 
     fun virtualReceiver(receiver: MidiReceiver?, clients: Int, wire: Wire = Wire.BYTES) = worker.execute {
@@ -307,6 +334,27 @@ class MidiEngine(context: Context) {
         tick = worker.schedule(::pulse, (pulseAt - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS)
     }
 
+    fun sendDaw(control: DawControl, resetToStart: Boolean = false) = worker.execute {
+        val feedback = _status.value.daw
+        if (control == DawControl.PLAY && feedback.playing == true) return@execute
+        if (!resetToStart && control == DawControl.PAUSE &&
+            feedback.playing == false && feedback.recording != true) return@execute
+        if (control != DawControl.CLICK) {
+            rewind?.cancel(false)
+            rewind = null
+        }
+        sendDawPulse(control)
+        if (resetToStart) {
+            // Waveform stops on the first command and zeroes its cursor when already stopped.
+            rewind = worker.schedule({ sendDawPulse(DawControl.REWIND_ZERO) }, 150, TimeUnit.MILLISECONDS)
+        }
+    }
+
+    private fun sendDawPulse(control: DawControl) {
+        transmit(control.press())
+        transmit(control.release())
+    }
+
     fun send(message: Message) = worker.execute { transmit(message) }
     fun panic() = worker.execute { releaseAll() }
 
@@ -329,10 +377,12 @@ class MidiEngine(context: Context) {
             sent = deliver(output, current.wire, group)
             if (!sent) {
                 runCatching { output.close() }
+                runCatching { feedbackPort?.close() }
+                feedbackPort = null
                 runCatching { device?.close() }
                 port = null
                 device = null
-                _status.value = current.copy(destination = null, label = "Conexión MIDI perdida", wire = Wire.BYTES)
+                _status.value = current.copy(destination = null, label = "Conexión MIDI perdida", wire = Wire.BYTES, daw = DawFeedback())
             }
         }
         lan?.let { sent = it.send(MidiCodec.encode(message, Wire.BYTES)) || sent }

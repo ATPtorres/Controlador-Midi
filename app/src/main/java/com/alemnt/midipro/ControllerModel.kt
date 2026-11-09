@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.alemnt.midi.DawControl
 import com.alemnt.midi.Message
 import com.alemnt.midi.MidiEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,7 +57,7 @@ class ControllerModel @Inject constructor(
         midi.virtualEnabled(preset.value.virtual)
         midi.setGroup(preset.value.group)
         midi.clockSettings(preset.value.bpm, preset.value.clock)
-        midi.metronome(preset.value.metronome)
+        midi.metronome(preset.value.metronome && !preset.value.dawTransport)
         viewModelScope.launch {
             var destination: String? = null
             midi.status.collect { state ->
@@ -81,9 +82,16 @@ class ControllerModel @Inject constructor(
             old.smartOctaves != new.smartOctaves || old.virtual != new.virtual || old.group != new.group) release()
         if (old.virtual != new.virtual) midi.virtualEnabled(new.virtual)
         if (old.group != new.group) midi.setGroup(new.group)
-        if (old.metronome != new.metronome) midi.metronome(new.metronome)
+        if (old.dawTransport != new.dawTransport) stopLocal()
+        if (old.metronome != new.metronome || old.dawTransport != new.dawTransport) {
+            midi.metronome(new.metronome && !new.dawTransport)
+        }
         if (old.bpm != new.bpm || old.clock != new.clock) midi.clockSettings(new.bpm, new.clock)
-        if (old.channel != new.channel) lastValue.fill(-1)
+        if (old.channel != new.channel || old.dawTransport != new.dawTransport ||
+            old.faders.indices.any { old.faders[it].cc != new.faders[it].cc }) {
+            pending.forEach { it?.cancel() }
+            lastValue.fill(-1)
+        }
         _preset.value = new
         persistJob?.cancel()
         persistJob = viewModelScope.launch(Dispatchers.IO) {
@@ -196,6 +204,8 @@ class ControllerModel @Inject constructor(
     fun moveFader(index: Int, position: Float, final: Boolean = false) {
         val p = preset.value
         val fader = p.faders[index]
+        if (p.dawTransport && p.channel == DawControl.CHANNEL &&
+            DawControl.entries.any { it.cc == fader.cc }) return
         val target = position.coerceIn(0f, 1f)
         val shown = if (p.smoothing && !final) fader.value + (target - fader.value) * 0.52f else target
         change { it.copy(faders = it.faders.replace(index, fader.copy(value = shown))) }
@@ -226,7 +236,16 @@ class ControllerModel @Inject constructor(
     fun bend(value: Int) = midi.send(Message.Bend(preset.value.channel, value))
     fun sendProgram() = preset.value.run { midi.send(Message.Program(channel, program, bankMsb, bankLsb)) }
 
+    fun toggleMetronome() {
+        if (preset.value.dawTransport) midi.sendDaw(DawControl.CLICK)
+        else change { it.copy(metronome = !it.metronome) }
+    }
+
     fun play() {
+        if (preset.value.dawTransport) {
+            midi.sendDaw(DawControl.PLAY)
+            return
+        }
         val old = _transport.value
         if (old.playing) return
         midi.startClock(resume = old.elapsedMs > 0)
@@ -243,6 +262,10 @@ class ControllerModel @Inject constructor(
     }
 
     fun pause() {
+        if (preset.value.dawTransport) {
+            midi.sendDaw(DawControl.PAUSE)
+            return
+        }
         if (!_transport.value.playing) return
         clock?.cancel()
         _transport.value = _transport.value.copy(playing = false, elapsedMs = SystemClock.elapsedRealtime() - startedAt)
@@ -250,6 +273,10 @@ class ControllerModel @Inject constructor(
     }
 
     fun record() {
+        if (preset.value.dawTransport) {
+            midi.sendDaw(DawControl.RECORD)
+            return
+        }
         val recording = !_transport.value.recording
         midi.send(Message.Transport(if (recording) 0x06 else 0x07))
         _transport.value = _transport.value.copy(recording = recording)
@@ -257,6 +284,11 @@ class ControllerModel @Inject constructor(
     }
 
     fun stop() {
+        if (preset.value.dawTransport) midi.sendDaw(DawControl.PAUSE, resetToStart = true)
+        stopLocal()
+    }
+
+    fun stopLocal() {
         clock?.cancel()
         if (_transport.value.recording) midi.send(Message.Transport(0x07))
         midi.stopClock()
@@ -265,7 +297,7 @@ class ControllerModel @Inject constructor(
     }
 
     override fun onCleared() {
-        stop()
+        stopLocal()
         bluetooth.stop()
     }
 }

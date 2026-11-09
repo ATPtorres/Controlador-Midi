@@ -23,7 +23,24 @@ El APK aparece en `app/build/outputs/apk/debug/app-debug.apk`.
 - **MIDI virtual.** En el sintetizador o DAW de Android, abre el puerto de salida `Controller Out` de **MIDI Performance Controller Pro**. En Android 15 o posterior existe además `Controller UMP` para aplicaciones MIDI 2.0.
 - **USB UMP.** Android 13 introdujo la API para puertos USB UMP. La disponibilidad depende del puerto que expongan el dispositivo y la versión de Android del fabricante. El modo automático usa el protocolo predeterminado anunciado y, si no está especificado, usa UMP MIDI 1.0. Selecciona UMP MIDI 2.0 manualmente si el equipo ya está configurado para ese protocolo. El proyecto no implementa la negociación MIDI-CI.
 
-Activa **Metrónomo** en la barra superior y pulsa **Play** para oír el clic local al BPM elegido. Usa **Stop** o **Liberar notas MIDI** para apagar todas las notas que mantiene la app. Los sintetizadores externos producen el audio. **Record** envía MMC Record Strobe/Exit. **Play**, **Pause** y **Stop** envían Start/Continue/Stop de MIDI Clock. Activa la sincronización externa y MMC en el DAW si quieres que los botones controlen su transporte.
+## Transporte maestro en Waveform
+
+1. Conecta el teléfono por USB MIDI y habilita su entrada en **Settings → MIDI Devices**.
+2. En **Settings → Control Surfaces**, crea una superficie personalizada de tipo MIDI e importa [MIDI-Performance-Waveform.trkctrlr](desktop/MIDI-Performance-Waveform.trkctrlr) con **Import Settings**.
+3. Selecciona como entrada de la superficie el puerto del teléfono. Para que se iluminen los estados de reproducción, grabación y metrónomo, selecciona también el puerto del teléfono como salida de la superficie.
+4. En el proyecto, desactiva **Return to start on stop** en **Options** para que **Pausa** conserve la posición. Arma las pistas que quieras grabar.
+
+La app viene con **Transporte maestro del DAW** activado. Los botones actúan sobre el proyecto activo. **Detener** envía un Stop y luego un segundo Stop mediante un CC distinto. En Waveform, el segundo Stop mueve el cursor a 0:00 cuando el transporte ya está detenido.
+
+| Botón | Canal | CC | Asignación Waveform |
+| --- | --- | --- | --- |
+| Reproducir | 16 | 110 | Transport → Play |
+| Pausa | 16 | 111 | Transport → Stop |
+| Grabar | 16 | 112 | Transport → Record |
+| Detener | 16 | 111 y 113 | Transport → Stop en ambos |
+| Metrónomo | 16 | 114 | Options → Toggle click |
+
+En otros DAWs, asigna **CC 113** a la acción que lleva el cursor al inicio. El puente de escritorio existente permite enviar estos comandos sin indicadores de retorno. Si quieres volver al transporte y metrónomo locales, desactiva **Transporte maestro del DAW** en ajustes.
 
 ## Superficies
 
@@ -34,7 +51,7 @@ Activa **Metrónomo** en la barra superior y pulsa **Play** para oír el clic lo
 | Escala | Toca las notas ordenadas por grado, con sólo las notas de la escala seleccionada. |
 | Acordes | Matriz 7×3. En **Editar**, toca para cambiar el voicing o arrastra una celda para intercambiarla. Las escalas de menos de siete notas dejan grados disponibles para voicings personalizados. |
 | Grid | Cuadrícula 4×6 en vertical y 8×3 en horizontal. La afinación asciende de izquierda a derecha y de abajo hacia arriba. |
-| Faders | Seis CC asignables. Cada uno admite curvas, color y alta resolución. Ajusta **Stream CC** para enviar al mover o sólo al soltar. |
+| Faders | Seis CC asignables con nombres guardados en el preset. Cada uno admite curvas, color y alta resolución. Ajusta **Stream CC** para enviar al mover o sólo al soltar. |
 
 El protocolo MIDI 1.0 permite pares CC de 14 bits para los controladores 0–31. CC74 y los demás controladores fuera de ese intervalo usan 7 bits en MIDI 1.0. MIDI 2.0 usa su campo de 32 bits y lo alimenta con el valor calculado de hasta 14 bits. La presión táctil y el número de toques simultáneos dependen del hardware.
 

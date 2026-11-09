@@ -14,10 +14,10 @@ android {
         applicationId = "com.alemnt.midipro"
         minSdk = 33
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.1.0"
+        versionCode = 5
+        versionName = "1.2.0"
         if (providers.gradleProperty("standaloneApk").orNull == "true") {
-            applicationId = "com.alemnt.midipro.bridge"
+            applicationId = "com.alemnt.midipro.transport"
         }
         manifestPlaceholders["controllerAppLabel"] = "@string/app_name"
     }

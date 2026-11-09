@@ -49,11 +49,11 @@ jobs:
           "$sdk/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/midi-aligned.apk"
           "$sdk/apksigner" sign --ks "$RUNNER_TEMP/midi-test.p12" --ks-pass pass:android-test \
             --v2-signing-enabled true --v3-signing-enabled true \
-            --out MIDI-Performance-Controller-Pro-v1.1.0.apk "$RUNNER_TEMP/midi-aligned.apk"
-          "$sdk/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-v1.1.0.apk
-          "$sdk/zipalign" -c -P 16 4 MIDI-Performance-Controller-Pro-v1.1.0.apk
-          badging="$("$sdk/aapt" dump badging MIDI-Performance-Controller-Pro-v1.1.0.apk)"
-          grep -F "package: name='com.alemnt.midipro.bridge' versionCode='4'" <<< "$badging"
+            --out MIDI-Performance-Controller-Pro-v1.2.0.apk "$RUNNER_TEMP/midi-aligned.apk"
+          "$sdk/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-v1.2.0.apk
+          "$sdk/zipalign" -c -P 16 4 MIDI-Performance-Controller-Pro-v1.2.0.apk
+          badging="$("$sdk/aapt" dump badging MIDI-Performance-Controller-Pro-v1.2.0.apk)"
+          grep -F "package: name='com.alemnt.midipro.transport' versionCode='5'" <<< "$badging"
           grep -Fx "sdkVersion:'33'" <<< "$badging"
           grep -F "'arm64-v8a'" <<< "$badging"
           if grep -q '^application-debuggable' <<< "$badging"; then exit 1; fi
@@ -69,9 +69,11 @@ jobs:
           arch: x86_64
           emulator-boot-timeout: 300
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash .github/scripts/check-android-install.sh MIDI-Performance-Controller-Pro-v1.1.0.apk
+          script: bash .github/scripts/check-android-install.sh MIDI-Performance-Controller-Pro-v1.2.0.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MIDI-Performance-Controller-Pro-v1.1.0
-          path: MIDI-Performance-Controller-Pro-v1.1.0.apk
+          name: MIDI-Performance-Controller-Pro-v1.2.0
+          path: |
+            MIDI-Performance-Controller-Pro-v1.2.0.apk
+            desktop/MIDI-Performance-Waveform.trkctrlr
           if-no-files-found: error
