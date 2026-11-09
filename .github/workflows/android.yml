@@ -20,7 +20,23 @@ jobs:
           test -f "$ANDROID_HOME/platforms/android-35/android.jar"
           test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew --no-daemon :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+      - name: Download and verify Gradle 8.9
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/gradle-8.9-bin.zip"
+          checksum=d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab
+          for url in \
+            https://downloads.gradle.org/distributions/gradle-8.9-bin.zip \
+            https://mirrors.huaweicloud.com/gradle/gradle-8.9-bin.zip; do
+            if curl --fail --location --silent --show-error --retry 2 --retry-delay 1 --max-time 80 "$url" --output "$archive" &&
+                printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check; then
+              unzip -q "$archive" -d "$RUNNER_TEMP"
+              echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+          done
+          exit 1
+      - run: gradle --no-daemon :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
       - name: Verify APK signature
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk MIDI-Performance-Controller-Pro.apk
