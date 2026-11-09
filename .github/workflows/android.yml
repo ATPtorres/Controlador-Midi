@@ -36,16 +36,40 @@ jobs:
             fi
           done
           exit 1
-      - run: gradle --no-daemon -PgithubTestApk=true :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
-      - name: Verify APK signature
+      - name: Build standalone release APK
+        run: gradle --no-daemon -PstandaloneApk=true :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease
+      - name: Sign and verify release APK
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk MIDI-Performance-Controller-Pro-GitHub-Test.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-GitHub-Test.apk
-          badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MIDI-Performance-Controller-Pro-GitHub-Test.apk)"
-          grep -F "package: name='com.alemnt.midipro.githubtest'" <<< "$badging"
+          sdk="$ANDROID_HOME/build-tools/35.0.0"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/midi-test.p12" -storetype PKCS12 \
+            -storepass android-test -alias midi-test -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=MIDI Performance Controller Pro Android Testing"
+          "$sdk/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/midi-aligned.apk"
+          "$sdk/apksigner" sign --ks "$RUNNER_TEMP/midi-test.p12" --ks-pass pass:android-test \
+            --v2-signing-enabled true --v3-signing-enabled true \
+            --out MIDI-Performance-Controller-Pro-v1.0.2.apk "$RUNNER_TEMP/midi-aligned.apk"
+          "$sdk/apksigner" verify --min-sdk-version 33 --verbose MIDI-Performance-Controller-Pro-v1.0.2.apk
+          "$sdk/zipalign" -c -P 16 4 MIDI-Performance-Controller-Pro-v1.0.2.apk
+          badging="$("$sdk/aapt" dump badging MIDI-Performance-Controller-Pro-v1.0.2.apk)"
+          grep -F "package: name='com.alemnt.midipro.mobile' versionCode='3'" <<< "$badging"
           grep -Fx "sdkVersion:'33'" <<< "$badging"
+          grep -F "'arm64-v8a'" <<< "$badging"
+          if grep -q '^application-debuggable' <<< "$badging"; then exit 1; fi
+      - name: Enable emulator hardware acceleration
+        run: |
+          test -c /dev/kvm
+          sudo chown "$(id -u)" /dev/kvm
+      - name: Install and launch the delivered APK on Android 13
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: default
+          arch: x86_64
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash .github/scripts/check-android-install.sh MIDI-Performance-Controller-Pro-v1.0.2.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MIDI-Performance-Controller-Pro-GitHub-Test
-          path: MIDI-Performance-Controller-Pro-GitHub-Test.apk
+          name: MIDI-Performance-Controller-Pro-v1.0.2
+          path: MIDI-Performance-Controller-Pro-v1.0.2.apk
           if-no-files-found: error

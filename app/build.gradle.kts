@@ -14,8 +14,11 @@ android {
         applicationId = "com.alemnt.midipro"
         minSdk = 33
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
+        if (providers.gradleProperty("standaloneApk").orNull == "true") {
+            applicationId = "com.alemnt.midipro.mobile"
+        }
         manifestPlaceholders["controllerAppLabel"] = "@string/app_name"
     }
     buildTypes {
