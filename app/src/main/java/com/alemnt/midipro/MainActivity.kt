@@ -133,7 +133,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
             val compact = maxHeight < 430.dp
             val broad = maxWidth > 760.dp
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 7.dp)) {
-                TransportBar(transport, p.bpm, status, compact, broad, grid, model) { panel = it }
+                TransportBar(transport, p.bpm, status, p.virtual, compact, broad, grid, model) { panel = it }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (grid) {
@@ -209,7 +209,8 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
 }
 
 @Composable
-private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, compact: Boolean, broad: Boolean, portrait: Boolean,
+private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, virtualEnabled: Boolean,
+                         compact: Boolean, broad: Boolean, portrait: Boolean,
                          model: ControllerModel, open: (String) -> Unit) {
     val elapsed = t.elapsedMs / 1000
     val time = String.format(Locale.ROOT, "%02d:%02d", elapsed / 60, elapsed % 60)
@@ -242,12 +243,12 @@ private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, compact: Bo
                         modifier = Modifier.semantics { contentDescription = name })
                 }
             }
-            if (!portrait) TransportIndicators(time, bpm, status, model.preset.value.virtual, open)
+            if (!portrait) TransportIndicators(time, bpm, status, virtualEnabled, open)
         }
         if (portrait) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                TransportIndicators(time, bpm, status, model.preset.value.virtual, open)
+                TransportIndicators(time, bpm, status, virtualEnabled, open)
             }
         }
     }
