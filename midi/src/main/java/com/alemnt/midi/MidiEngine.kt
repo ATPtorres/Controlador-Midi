@@ -10,8 +10,11 @@ import android.media.midi.MidiManager
 import android.media.midi.MidiReceiver
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import java.io.IOException
-import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -23,18 +26,25 @@ data class MidiStatus(
     val label: String = "Sin destino físico",
     val wire: Wire = Wire.BYTES,
     val virtualClients: Int = 0,
-    val sent: Long = 0
+    val sent: Long = 0,
+    val lastNoteOn: Int? = null,
+    val lastNoteAt: Long = 0
 )
 
 class MidiEngine(context: Context) {
     private val manager = context.getSystemService(MidiManager::class.java)
     private val main = Handler(Looper.getMainLooper())
-    private val worker = Executors.newSingleThreadExecutor { task ->
+    private val worker = ScheduledThreadPoolExecutor(1) { task ->
         Thread({
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
+            runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO) }
             task.run()
         }, "MIDI output")
     }
+    private var tick: ScheduledFuture<*>? = null
+    private var pulseAt = 0L
+    private var bpm = 120
+    private var sendClock = true
+    private var running = false
     private val _destinations = MutableStateFlow<List<Destination>>(emptyList())
     val destinations = _destinations.asStateFlow()
     private val _status = MutableStateFlow(MidiStatus())
@@ -42,7 +52,6 @@ class MidiEngine(context: Context) {
     private var device: MidiDevice? = null
     private var port: MidiInputPort? = null
     private val virtual = mutableMapOf<Wire, Pair<MidiReceiver, Int>>()
-    private var virtualGroup = 0
     private var group = 0
     private var generation = 0
     private var virtualEnabled = true
@@ -85,7 +94,7 @@ class MidiEngine(context: Context) {
         }
     }
 
-    fun open(destination: Destination, force: Wire?, midiGroup: Int) = worker.execute {
+    fun open(destination: Destination, force: Wire?) = worker.execute {
         val service = manager ?: return@execute
         val ticket = ++generation
         close("Abriendo ${destination.name}…")
@@ -96,7 +105,7 @@ class MidiEngine(context: Context) {
                 } else {
                     val wire = if (!destination.ump) Wire.BYTES else force ?:
                         if ((opened?.info?.defaultProtocol ?: 0) >= 17) Wire.UMP2 else Wire.UMP1
-                    bind(opened, destination.port, destination.id, destination.name, wire, midiGroup)
+                    bind(opened, destination.port, destination.id, destination.name, wire)
                 }
             }
         }, main)
@@ -113,7 +122,7 @@ class MidiEngine(context: Context) {
                     if (ticket != generation) opened?.close()
                     else {
                         val input = opened?.info?.ports?.firstOrNull { it.type == MidiDeviceInfo.PortInfo.TYPE_INPUT }
-                        bind(opened, input?.portNumber ?: -1, "ble:${opened?.info?.id}", label, Wire.BYTES, 0)
+                        bind(opened, input?.portNumber ?: -1, "ble:${opened?.info?.id}", label, Wire.BYTES)
                     }
                 }
             }, main)
@@ -122,7 +131,7 @@ class MidiEngine(context: Context) {
         }
     }
 
-    private fun bind(opened: MidiDevice?, number: Int, id: String, label: String, wire: Wire, midiGroup: Int) {
+    private fun bind(opened: MidiDevice?, number: Int, id: String, label: String, wire: Wire) {
         val newPort = if (number >= 0) opened?.openInputPort(number) else null
         if (opened == null || newPort == null) {
             opened?.close()
@@ -131,7 +140,6 @@ class MidiEngine(context: Context) {
         }
         device = opened
         port = newPort
-        group = midiGroup
         _status.value = _status.value.copy(destination = id, label = label, wire = wire)
     }
 
@@ -156,9 +164,8 @@ class MidiEngine(context: Context) {
     }
 
     fun setGroup(value: Int) = worker.execute {
-        if (group != value || virtualGroup != value) releaseAll()
+        if (group != value) releaseAll()
         group = value
-        virtualGroup = value
     }
 
     fun virtualEnabled(enabled: Boolean) = worker.execute {
@@ -197,6 +204,36 @@ class MidiEngine(context: Context) {
         }
     }
 
+    fun clockSettings(tempo: Int, enabled: Boolean) = worker.execute {
+        bpm = tempo
+        sendClock = enabled
+    }
+
+    fun startClock(resume: Boolean) = worker.execute {
+        tick?.cancel(false)
+        transmit(Message.System(if (resume) 0xFB else 0xFA))
+        running = true
+        pulseAt = System.nanoTime()
+        pulse()
+    }
+
+    fun stopClock() = worker.execute {
+        val wasRunning = running
+        running = false
+        tick?.cancel(false)
+        tick = null
+        if (wasRunning) transmit(Message.System(0xFC))
+    }
+
+    private fun pulse() {
+        if (!running) return
+        val now = System.nanoTime()
+        val interval = 60_000_000_000L / (bpm * 24)
+        if (sendClock) transmit(Message.System(0xF8))
+        pulseAt = maxOf(pulseAt + interval, now + interval / 2)
+        tick = worker.schedule(::pulse, (pulseAt - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS)
+    }
+
     fun send(message: Message) = worker.execute { transmit(message) }
     fun panic() = worker.execute { releaseAll() }
 
@@ -226,8 +263,13 @@ class MidiEngine(context: Context) {
             }
         }
         if (virtualEnabled) virtual.forEach { (wire, target) ->
-            sent = deliver(target.first, wire, if (wire == Wire.BYTES) 0 else virtualGroup) || sent
+            sent = deliver(target.first, wire, if (wire == Wire.BYTES) 0 else group) || sent
         }
-        if (sent) _status.value = _status.value.copy(sent = current.sent + 1)
+        if (sent) {
+            val state = _status.value
+            _status.value = if (message is Message.Note && message.on)
+                state.copy(sent = state.sent + 1, lastNoteOn = message.pitch, lastNoteAt = SystemClock.uptimeMillis())
+            else state.copy(sent = state.sent + 1)
+        }
     }
 }

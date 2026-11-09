@@ -166,7 +166,7 @@ private fun MidiPanel(p: Preset, status: MidiStatus, model: ControllerModel, sca
     IntControl("Grupo UMP", p.group + 1, 1..16) { value -> model.change { it.copy(group = value - 1) } }
     if (destinations.isEmpty()) Hint("Conecta una interfaz o un sintetizador USB MIDI, o selecciona MIDI en el modo USB del teléfono si está disponible.")
     destinations.forEach { destination ->
-        TextButton(onClick = { model.midi.open(destination, mode, p.group) }) { Text(destination.name) }
+        TextButton(onClick = { model.midi.open(destination, mode) }) { Text(destination.name) }
     }
     HorizontalDivider()
     Text("Bluetooth LE MIDI", fontWeight = FontWeight.SemiBold)
@@ -183,7 +183,7 @@ fun EditCell(page: SurfacePage, index: Int, p: Preset, model: ControllerModel, d
         SurfacePage.PADS -> {
             var pad by remember(index) { mutableStateOf(p.pads[index]) }
             Panel("Pad ${index + 1}", dismiss, {
-                Button(onClick = { model.change { it.copy(pads = it.pads.replace(index, pad)) }; dismiss() }) { Text("Guardar") }
+                Button(enabled = pad.icon.isNotBlank(), onClick = { model.change { it.copy(pads = it.pads.replace(index, pad)) }; dismiss() }) { Text("Guardar") }
             }) {
                 IntControl("Nota MIDI · ${noteName(pad.note)}", pad.note, 0..127) { pad = pad.copy(note = it) }
                 IntControl("Velocity", pad.velocity, 1..127) { pad = pad.copy(velocity = it) }

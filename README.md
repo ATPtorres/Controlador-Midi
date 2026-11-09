@@ -8,7 +8,7 @@ Controlador MIDI Android para interpretación en vivo. La app envía eventos MID
 - Para compilar, usa JDK 17, Android SDK Platform 35, Build Tools 35.0.0 y Gradle 8.9. También puedes abrir este directorio como proyecto en Android Studio.
 
 ```bash
-gradle :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+./gradlew :midi:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
 ```
 
 El APK aparece en `app/build/outputs/apk/debug/app-debug.apk`.

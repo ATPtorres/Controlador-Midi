@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -134,7 +133,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
             val compact = maxHeight < 430.dp
             val broad = maxWidth > 760.dp
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 7.dp)) {
-                TransportBar(transport, p.bpm, status, compact, broad, model) { panel = it }
+                TransportBar(transport, p.bpm, status, compact, broad, grid, model) { panel = it }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (grid) {
@@ -174,7 +173,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
                                 Text("+")
                             }
                         } else {
-                            TextButton(onClick = { panel = "superficie" }) { Text("Tamaño y rango") }
+                            TextButton(onClick = { panel = "superficie" }) { Text(if (keyboard) "Tamaño y rango" else "Rango") }
                         }
                     }
                     if (page == SurfacePage.FADERS) {
@@ -189,7 +188,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
                     }
                 }
 
-                PerformanceSurface(page, p, model, latched, edit, { cell = it },
+                PerformanceSurface(page, p, model, latched, status.lastNoteOn, status.lastNoteAt, edit, { cell = it },
                     Modifier.weight(1f).fillMaxWidth())
                 if (!compact && !grid) {
                     Text("${page.label}   /   CANAL ${p.channel + 1}   /   ${status.sent} EVENTOS MIDI",
@@ -210,7 +209,7 @@ private fun Workspace(page: SurfacePage, p: Preset, model: ControllerModel) {
 }
 
 @Composable
-private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, compact: Boolean, broad: Boolean,
+private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, compact: Boolean, broad: Boolean, portrait: Boolean,
                          model: ControllerModel, open: (String) -> Unit) {
     val elapsed = t.elapsedMs / 1000
     val time = String.format(Locale.ROOT, "%02d:%02d", elapsed / 60, elapsed % 60)
@@ -243,18 +242,29 @@ private fun TransportBar(t: Transport, bpm: Int, status: MidiStatus, compact: Bo
                         modifier = Modifier.semantics { contentDescription = name })
                 }
             }
-            Text(time, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 4.dp))
-            TextButton(onClick = { open("ajustes") }) { Text("$bpm BPM", maxLines = 1, fontSize = 11.sp) }
-            if (broad) Spacer(Modifier.width(8.dp))
-            val connected = status.destination != null || (status.virtualClients > 0 && model.preset.value.virtual)
-            TextButton(onClick = { open("midi") }) {
-                Text(if (connected) "● MIDI" else "○ MIDI", maxLines = 1, fontSize = 12.sp,
-                    color = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!portrait) TransportIndicators(time, bpm, status, model.preset.value.virtual, open)
+        }
+        if (portrait) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                TransportIndicators(time, bpm, status, model.preset.value.virtual, open)
             }
-            TextButton(onClick = { open("ajustes") }) { Text("⚙", fontSize = 19.sp) }
-            TextButton(onClick = { open("presets") }) { Text("Presets", maxLines = 1, fontSize = 11.sp) }
         }
     }
+}
+
+@Composable
+private fun TransportIndicators(time: String, bpm: Int, status: MidiStatus, virtualEnabled: Boolean,
+                                open: (String) -> Unit) {
+    Text(time, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 4.dp))
+    TextButton(onClick = { open("ajustes") }) { Text("$bpm BPM", maxLines = 1, fontSize = 11.sp) }
+    val connected = status.destination != null || (status.virtualClients > 0 && virtualEnabled)
+    TextButton(onClick = { open("midi") }) {
+        Text(if (connected) "● MIDI" else "○ MIDI", maxLines = 1, fontSize = 12.sp,
+            color = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    TextButton(onClick = { open("ajustes") }) { Text("⚙", fontSize = 19.sp) }
+    TextButton(onClick = { open("presets") }) { Text("Presets", maxLines = 1, fontSize = 11.sp) }
 }
 
 @Composable

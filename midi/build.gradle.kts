@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "com.alemnt.midi"
     compileSdk = 35
+    buildToolsVersion = "35.0.0"
     defaultConfig { minSdk = 33 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -55,6 +55,7 @@ class ControllerModel @Inject constructor(
     init {
         midi.virtualEnabled(preset.value.virtual)
         midi.setGroup(preset.value.group)
+        midi.clockSettings(preset.value.bpm, preset.value.clock)
         viewModelScope.launch {
             var destination: String? = null
             midi.status.collect { state ->
@@ -79,6 +80,7 @@ class ControllerModel @Inject constructor(
             old.smartOctaves != new.smartOctaves || old.virtual != new.virtual || old.group != new.group) release()
         if (old.virtual != new.virtual) midi.virtualEnabled(new.virtual)
         if (old.group != new.group) midi.setGroup(new.group)
+        if (old.bpm != new.bpm || old.clock != new.clock) midi.clockSettings(new.bpm, new.clock)
         if (old.channel != new.channel) lastValue.fill(-1)
         _preset.value = new
         persistJob?.cancel()
@@ -150,7 +152,7 @@ class ControllerModel @Inject constructor(
         val pad = padIndex?.let { p.pads[it] }
         val velocity = if (pad?.pressure ?: p.touchVelocity) velocity(pressure, pad?.velocity ?: p.velocity)
             else pad?.velocity ?: p.velocity
-        if (pad?.toggle == true && padIndex != null) {
+        if (pad?.toggle == true) {
             val latchToken = Long.MIN_VALUE + padIndex
             if (padIndex in _latched.value) {
                 _latched.value -= padIndex
@@ -218,24 +220,15 @@ class ControllerModel @Inject constructor(
     fun play() {
         val old = _transport.value
         if (old.playing) return
-        midi.send(Message.System(if (old.elapsedMs == 0L) 0xFA else 0xFB))
+        midi.startClock(resume = old.elapsedMs > 0)
         startedAt = SystemClock.elapsedRealtime() - old.elapsedMs
         _transport.value = old.copy(playing = true)
         clock?.cancel()
-        clock = viewModelScope.launch(Dispatchers.Default) {
-            var nextPulse = System.nanoTime()
-            var lastDisplay = 0L
+        clock = viewModelScope.launch {
             while (isActive) {
-                val now = System.nanoTime()
-                val interval = 60_000_000_000L / (preset.value.bpm * 24)
-                if (preset.value.clock) midi.send(Message.System(0xF8))
-                nextPulse = maxOf(nextPulse + interval, now + interval / 2)
+                delay(80)
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
-                if (elapsed - lastDisplay >= 80) {
-                    lastDisplay = elapsed
-                    _transport.update { if (it.playing) it.copy(elapsedMs = elapsed) else it }
-                }
-                delay(((nextPulse - System.nanoTime()) / 1_000_000).coerceAtLeast(1))
+                _transport.update { if (it.playing) it.copy(elapsedMs = elapsed) else it }
             }
         }
     }
@@ -244,7 +237,7 @@ class ControllerModel @Inject constructor(
         if (!_transport.value.playing) return
         clock?.cancel()
         _transport.value = _transport.value.copy(playing = false, elapsedMs = SystemClock.elapsedRealtime() - startedAt)
-        midi.send(Message.System(0xFC))
+        midi.stopClock()
     }
 
     fun record() {
@@ -257,7 +250,7 @@ class ControllerModel @Inject constructor(
     fun stop() {
         clock?.cancel()
         if (_transport.value.recording) midi.send(Message.Transport(0x07))
-        midi.send(Message.System(0xFC))
+        midi.stopClock()
         _transport.value = Transport()
         release()
     }

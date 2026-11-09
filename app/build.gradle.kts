@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.alemnt.midipro"
     compileSdk = 35
+    buildToolsVersion = "35.0.0"
     defaultConfig {
         applicationId = "com.alemnt.midipro"
         minSdk = 33
@@ -26,6 +27,7 @@ android {
 kapt { correctErrorTypes = true }
 dependencies {
     implementation(project(":midi"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.foundation:foundation")

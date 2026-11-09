@@ -64,6 +64,7 @@ data class Fader(val cc: Int, val color: Int, val value: Float = 0f, val fine: B
 
 @Serializable
 data class Preset(
+    val schema: Int = 1,
     val root: Int = 0,
     val scale: Scale = Scale.MAJOR,
     val octave: Int = 3,
@@ -94,7 +95,7 @@ data class Preset(
     val chordOrder: List<Int> = List(21) { it },
     val faders: List<Fader> = listOf(1, 7, 10, 11, 74, 71).mapIndexed { i, cc -> Fader(cc, i) }
 ) {
-    fun valid(): Boolean = root in 0..11 && octave in 0..6 && pianoOctaves in 1..8 &&
+    fun valid(): Boolean = schema == 1 && root in 0..11 && octave in 0..6 && pianoOctaves in 1..8 &&
         smartOctaves in 1..6 && pianoWidth in 26f..120f && smartWidth in 32f..130f &&
         channel in 0..15 && velocity in 1..127 && group in 0..15 && bpm in 30..300 &&
         listOf(bankMsb, bankLsb, program).all { it in 0..127 } &&
@@ -137,21 +138,29 @@ data class Preset(
         var base = chordRoot
         while (base + voiced.last() > 127) base -= 12
         while (base + voiced.first() < 0) base += 12
-        val quality = when (intervals.take(3)) {
-            listOf(0, 3, 6) -> "dim"
-            listOf(0, 3, 7) -> "m"
-            listOf(0, 4, 8) -> "+"
-            listOf(0, 4, 7) -> ""
+        val normalized = intervals.map { Math.floorMod(it, 12) }.toSet()
+        val quality = when {
+            3 in normalized && 6 in normalized && 7 !in normalized -> "dim"
+            3 in normalized && 7 in normalized && 4 !in normalized -> "m"
+            4 in normalized && 8 in normalized && 7 !in normalized -> "+"
+            4 in normalized && 7 in normalized -> ""
             else -> "·"
         }
-        val suffix = when (voice.size) {
-            4 -> if (intervals.getOrNull(3) == 11) "maj7" else "7"
+        val extension = when (intervals.size) {
+            4 -> "7"
             5 -> "9"
             6 -> "11"
             7 -> "13"
             else -> ""
         }
-        return Chord(pitchNames[chordRoot % 12] + quality + suffix, voiced.map { base + it })
+        val name = pitchNames[chordRoot % 12] + when {
+            extension.isEmpty() -> quality
+            quality == "dim" && 10 in normalized && extension == "7" -> "ø7"
+            11 in normalized && quality == "m" -> "m(maj$extension)"
+            11 in normalized -> "${quality}maj$extension"
+            else -> quality + extension
+        }
+        return Chord(name, voiced.map { base + it })
     }
 }
 

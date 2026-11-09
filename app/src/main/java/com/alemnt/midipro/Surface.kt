@@ -133,7 +133,7 @@ private fun layout(page: SurfacePage, p: Preset, width: Float, height: Float, de
 
 @Composable
 fun PerformanceSurface(page: SurfacePage, p: Preset, model: ControllerModel, latched: Set<Int>,
-                       editing: Boolean, editCell: (Int) -> Unit, modifier: Modifier = Modifier) {
+                       lastNoteOn: Int?, lastNoteAt: Long, editing: Boolean, editCell: (Int) -> Unit, modifier: Modifier = Modifier) {
     val density = LocalDensity.current.density
     val view = LocalView.current
     val live by rememberUpdatedState(p)
@@ -330,6 +330,12 @@ fun PerformanceSurface(page: SurfacePage, p: Preset, model: ControllerModel, lat
                                         drawCircle(accent.copy(alpha = (1f - progress) * .64f), radius, pulse.point,
                                             style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f * density))
                                     }
+                                }
+                                if (page == SurfacePage.PADS && pulse != null &&
+                                    lastNoteOn == key.notes.firstOrNull() && lastNoteAt >= pulse.start) {
+                                    val led = Offset(r.right - 13 * density, r.top + 13 * density)
+                                    drawCircle(accent.copy(alpha = (1f - progress) * .38f), 7 * density, led)
+                                    drawCircle(accent.copy(alpha = 1f - progress), 3 * density, led)
                                 }
                                 val titleSize = when (page) {
                                     SurfacePage.PADS -> 29f
