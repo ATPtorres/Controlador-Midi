@@ -1,0 +1,5 @@
+<devices>
+    <device name="MIDI Performance Controller Pro UMP" manufacturer="Alemnt" product="Performance Controller UMP">
+        <port name="Controller UMP"/>
+    </device>
+</devices>

@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">MIDI Performance Controller Pro</string>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#10131B</item>
+        <item name="android:statusBarColor">#10131B</item>
+        <item name="android:navigationBarColor">#10131B</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

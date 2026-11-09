@@ -1,0 +1,5 @@
+<devices>
+    <device name="MIDI Performance Controller Pro" manufacturer="Alemnt" product="Performance Controller">
+        <output-port name="Controller Out"/>
+    </device>
+</devices>
